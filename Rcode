@@ -7,7 +7,7 @@ library(dplyr)
 library(ggplot2)
 library(GGally)
 library(car)
-
+setwd("C:\\Users\\xwalker\\Documents\\NAU\\Data\\NWT\\CombustionGood")
 dat<-read.csv("NWTcombustion_10252017_B.csv",header=T, na.string=NA, sep=",")
 names(dat)
 dat<-subset(dat, !site=="LL-1")
@@ -22,16 +22,25 @@ dat<-mutate(dat, moisture.new = ifelse(moisture=="xeric"|moisture=="Xeric"|moist
 names(dat)
 dat<-mutate(dat, prefire.org=org+burn.depth)
 dat<-mutate(dat, log.total.combustion.gCm2=log(total.combustion.gCm2))
-dat1<-dplyr::select(dat, site, burn, ecoregion, log.total.combustion.gCm2, Lat_start,FWI_LB,DOB_LB,DC_LB,ba.Pima,ba.Piba,pima.prop,prefire.org,age.y, elev, sand, moisture.new, tree.bio.m2, FFMC_LB, DMC_LB)
+dat1<-dplyr::select(dat, site, burn, plot,ecoregion, Lat_start,FWI_LB,DOB_LB,DC_LB,ba.Pima,ba.Piba,pima.prop,prefire.org,age.y, elev, sand, moisture.new, tree.bio.m2, FFMC_LB, DMC_LB)
 names(dat1)
 
-dat2<-na.omit(dat1)
+comb<-dplyr::select(dat, log.total.combustion.gCm2, burn, site, plot)
 
+dat1<- lapply(dat1, function(x) if(is.numeric(x)){
+  scale(x)
+} else x)
 
-#########################################
+head(dat1)
+head(dat)
+
+dat2<-merge(comb, dat1, by=c("burn", "site", "plot"))
+pairs(dat2)
+##############################
 
 dat2$ecoregion<-as.factor(dat2$ecoregion)
 
+dat2<-na.omit(dat2)
 ############################ the "global SEM"
 ########################################
 nwt.sem <- psem(
@@ -56,85 +65,41 @@ fisherC(nwt.sem)
 summary(nwt.sem)
 coefs(nwt.sem)
 rsquared(nwt.sem)
-
+anova.psem(nwt.sem)
 
 ########################multigroup
 ########################### fully uncontsrained - 
-nwt.sem1 <- psem(
-  lme(moisture.new ~ ecoregion*elev + ecoregion*age.y, random=~1|burn/site, data = dat2),
-  lme(DOB_LB ~ ecoregion*Lat_start , random=~1|burn/site,data = dat2),
-  lme(DMC_LB ~  ecoregion*DOB_LB +ecoregion*Lat_start, random=~1|burn/site,data = dat2),
-  lme(FFMC_LB ~  ecoregion*DOB_LB , random=~1|burn/site,data = dat2),
-  lme(tree.bio.m2 ~ ecoregion*age.y +ecoregion*Lat_start +ecoregion*elev, random=~1|burn/site,data = dat2),
-  lme(pima.prop ~ ecoregion*age.y, random=~1|burn/site,data = dat2),
-  lme(log.total.combustion.gCm2 ~ ecoregion*DOB_LB+ecoregion*DMC_LB+ecoregion*FFMC_LB+ecoregion*pima.prop+ecoregion*tree.bio.m2+ ecoregion*moisture.new +ecoregion*age.y, random=~1|burn/site,data = dat2),
+##########################to get margins you need to use lme4 instead 
+#########MLexamp.6 <- lmer(extro ~ open + agree + social + (1 | school), data = lmm.data)
+
+library(lme4)
+nwt.sem2 <- psem(
+  lmer(moisture.new ~ ecoregion*elev + ecoregion*age.y + (1|burn/site), data = dat2),
+  lmer(DOB_LB ~ ecoregion*Lat_start + (1|burn/site),data = dat2),
+  lmer(DMC_LB ~  ecoregion*DOB_LB +ecoregion*Lat_start + (1|burn/site),data = dat2),
+  lmer(FFMC_LB ~  ecoregion*DOB_LB + (1|burn/site),data = dat2),
+  lmer(tree.bio.m2 ~ ecoregion*age.y +ecoregion*Lat_start +ecoregion*elev+ (1|burn/site),data = dat2),
+  lmer(pima.prop ~ ecoregion*age.y+ (1|burn/site),data = dat2),
+  lmer(log.total.combustion.gCm2 ~ ecoregion*DOB_LB+ecoregion*DMC_LB+ecoregion*FFMC_LB+ecoregion*pima.prop+ecoregion*tree.bio.m2+ ecoregion*moisture.new +ecoregion*age.y + (1|burn/site),data = dat2),
   FFMC_LB%~~%DMC_LB,
   moisture.new%~~%pima.prop,
   moisture.new%~~%tree.bio.m2,
   pima.prop%~~%tree.bio.m2,
   DOB_LB%~~%pima.prop,
-    dat2
+  dat2
 )
 
-lapply(nwt.sem1[-length(nwt.sem1)], Anova)
-#################### get the following error: Error in vcov.default(mod) : there is no vcov() method for models of class formula.cerror
-################### remove the correlated errors and it works - BUT I need to include those - how?
-
-nwt.sem2 <- psem(
-  lme(moisture.new ~ ecoregion*elev + ecoregion*age.y, random=~1|burn/site, data = dat2),
-  lme(DOB_LB ~ ecoregion*Lat_start , random=~1|burn/site,data = dat2),
-  lme(DMC_LB ~  ecoregion*DOB_LB +ecoregion*Lat_start, random=~1|burn/site,data = dat2),
-  lme(FFMC_LB ~  ecoregion*DOB_LB , random=~1|burn/site,data = dat2),
-  lme(tree.bio.m2 ~ ecoregion*age.y +ecoregion*Lat_start +ecoregion*elev, random=~1|burn/site,data = dat2),
-  lme(pima.prop ~ ecoregion*age.y, random=~1|burn/site,data = dat2),
-  lme(log.total.combustion.gCm2 ~ ecoregion*DOB_LB+ecoregion*DMC_LB+ecoregion*FFMC_LB+ecoregion*pima.prop+ecoregion*tree.bio.m2+ ecoregion*moisture.new +ecoregion*age.y, random=~1|burn/site,data = dat2)
-)
-lapply(nwt.sem2[-length(nwt.sem2)], Anova)
-
+anova.psem(nwt.sem2)
 dSep(nwt.sem2)
 fisherC(nwt.sem2)
 summary(nwt.sem2)
+rsquared(nwt.sem2)
 
-######################## trying to obtain the coefficients
-###########################################
-
-
-library(margins)
-
-getMargins <- function(x) {
-  ret <- summary(margins(x, at=list(ecoregion=levels(dat2$ecoregion))))
-  ret <- ret[-which(ret$factor=="ecoregion1"),] #weird output
-  ret <- cbind(response = rep(as.character(attr(terms(x), "variables")[2]), nrow(ret)), ret)
-  ret[,1:4]
-}
-
-#make a nice data frame
-pcoefs <- lapply(nwt.sem2[-length(nwt.sem2)], getMargins)
-###################### Error in coeftemp[i] + eps : non-numeric argument to binary operator 
-pcoefs <- do.call(rbind, pcoefs)
-
-############################# is this because of the random effects??
-nwt.sem3 <- psem(
-  lm(moisture.new ~ ecoregion*elev + ecoregion*age.y,  data = dat2),
-  lm(DOB_LB ~ ecoregion*Lat_start , ,data = dat2),
-  lm(DMC_LB ~  ecoregion*DOB_LB +ecoregion*Lat_start, data = dat2),
-  lm(FFMC_LB ~  ecoregion*DOB_LB , data = dat2),
-  lm(tree.bio.m2 ~ ecoregion*age.y +ecoregion*Lat_start +ecoregion*elev,data = dat2),
-  lm(pima.prop ~ ecoregion*age.y, data = dat2),
-  lm(log.total.combustion.gCm2 ~ ecoregion*DOB_LB+ecoregion*DMC_LB+ecoregion*FFMC_LB+ecoregion*pima.prop+ecoregion*tree.bio.m2+ ecoregion*moisture.new +ecoregion*age.y,data = dat2)
-)
-lapply(nwt.sem3[-length(nwt.sem3)], Anova)
-
-getMargins <- function(x) {
-  ret <- summary(margins(x, at=list(ecoregion=levels(dat2$ecoregion))))
-  ret <- ret[-which(ret$factor=="ecoregion1"),] #weird output
-  ret <- cbind(response = rep(as.character(attr(terms(x), "variables")[2]), nrow(ret)), ret)
-  ret[,1:4]
-}
 
 ##############
-pcoefs <- lapply(nwt.sem3[-length(nwt.sem3)], getMargins)
-############## no error - BUT still NO results :(
+pcoefs<-getMargins.psem(nwt.sem2)
+##############  Error in as.list.default(X) : 
+########3    no method for coercing this S4 class to a vector 
 ###################### 
 pcoefs <- do.call(rbind, pcoefs)
 pcoefs
@@ -144,66 +109,63 @@ pcoefs
 #################################### the global composite model
 ######################################################
 
-
-
-dat1<-select(dat, site, burn, ecoregion, log.total.combustion.gCm2, DOB_LB,FFMC_LB,DMC_LB,DC_LB,ISI_LB,BUI_LB,FWI_LB,VPD_LB,tree.bio.m2, pima.prop,Pima.dens,Piba.dens,ba.Pima,ba.Piba, elev,age.y,prefire.org,moisture.new)
+dat1<-dplyr::select(dat, site, burn, plot, ecoregion, DOB_LB,FFMC_LB,DMC_LB,DC_LB,ISI_LB,BUI_LB,FWI_LB,VPD_LB,tree.bio.m2, pima.prop,Pima.dens,Piba.dens,ba.Pima,ba.Piba, elev,age.y,prefire.org,moisture.new)
 names(dat1)
-dat5<-na.omit(dat1)
+
+comb<-dplyr::select(dat, log.total.combustion.gCm2, burn, site, plot)
+
+dat1<- lapply(dat1, function(x) if(is.numeric(x)){
+  scale(x)
+} else x)
+
+dat2<-merge(comb, dat1, by=c("burn", "site", "plot"))
+
+
+dat5<-na.omit(dat2)
 
 ##########################################
 names(dat5)
 head(dat5)
 #First, fit the observed only model on the composite piece
-total.comb.model<- lme(log.total.combustion.gCm2 ~ DOB_LB+FFMC_LB+DMC_LB+DC_LB+ISI_LB+BUI_LB+FWI_LB+VPD_LB+tree.bio.m2+pima.prop+Pima.dens+Piba.dens+ba.Pima+ba.Piba+elev+age.y+prefire.org+moisture.new, random=~1|ecoregion, data=dat5)
+total.comb.model<- lmer(log.total.combustion.gCm2 ~ DOB_LB+FFMC_LB+DMC_LB+DC_LB+ISI_LB+BUI_LB+FWI_LB+VPD_LB+tree.bio.m2+pima.prop+Pima.dens+Piba.dens+ba.Pima+ba.Piba+elev+age.y+prefire.org+moisture.new+ (1|burn/site), data=dat5)
 
-coefs(total.comb.model)
+fixef(total.comb.model)
 #Now extract a composite
-dat5$fire.eff <- with(dat5, coef(total.comb.model)[2]*DOB_LB 
-                      + coef(total.comb.model)[3]*FFMC_LB 
-                      +coef(total.comb.model)[4]*DMC_LB
-                      +coef(total.comb.model)[5]*DC_LB
-                      +coef(total.comb.model)[6]*ISI_LB
-                      +coef(total.comb.model)[7]*BUI_LB
-                      +coef(total.comb.model)[8]*FWI_LB
-                      +coef(total.comb.model)[9]*VPD_LB)
-
-################ the mixed model does not work - I cannot extract a composite variable: 
-#Error in `$<-.data.frame`(`*tmp*`, fire.eff, value = list(DOB_LB = c(4.63804350304427,: replacement has 2 rows, data has 198
-
-######### so try with siple linear model
-total.comb.model<- lm(log.total.combustion.gCm2 ~ DOB_LB+FFMC_LB+DMC_LB+DC_LB+ISI_LB+BUI_LB+FWI_LB+VPD_LB+tree.bio.m2+pima.prop+Pima.dens+Piba.dens+ba.Pima+ba.Piba+elev+age.y+prefire.org+moisture.new, data=dat5)
+dat5$fire.eff <- with(dat5, fixef(total.comb.model)[2]*DOB_LB 
+                      + fixef(total.comb.model)[3]*FFMC_LB 
+                      +fixef(total.comb.model)[4]*DMC_LB
+                      +fixef(total.comb.model)[5]*DC_LB
+                      +fixef(total.comb.model)[6]*ISI_LB
+                      +fixef(total.comb.model)[7]*BUI_LB
+                      +fixef(total.comb.model)[8]*FWI_LB
+                      +fixef(total.comb.model)[9]*VPD_LB)
 
 
-dat5$fire.eff <- with(dat5, coef(total.comb.model)[2]*DOB_LB 
-                      + coef(total.comb.model)[3]*FFMC_LB 
-                      +coef(total.comb.model)[4]*DMC_LB
-                      +coef(total.comb.model)[5]*DC_LB
-                      +coef(total.comb.model)[6]*ISI_LB
-                      +coef(total.comb.model)[7]*BUI_LB
-                      +coef(total.comb.model)[8]*FWI_LB
-                      +coef(total.comb.model)[9]*VPD_LB)
+
+dat5$tree.eff <- with(dat5, fixef(total.comb.model)[10]*tree.bio.m2 
+                      + fixef(total.comb.model)[11]*pima.prop 
+                      +fixef(total.comb.model)[12]*Pima.dens
+                      +fixef(total.comb.model)[13]*Piba.dens
+                      +fixef(total.comb.model)[14]*ba.Pima
+                      +fixef(total.comb.model)[15]*ba.Piba)
+
+dat5$land.eff <- with(dat5, fixef(total.comb.model)[16]*elev 
+                      + fixef(total.comb.model)[17]*age.y 
+                      +fixef(total.comb.model)[18]*prefire.org
+                      +fixef(total.comb.model)[19]*moisture.new)
 
 
-dat5$tree.eff <- with(dat5, coef(total.comb.model)[10]*tree.bio.m2 
-                      + coef(total.comb.model)[11]*pima.prop 
-                      +coef(total.comb.model)[12]*Pima.dens
-                      +coef(total.comb.model)[13]*Piba.dens
-                      +coef(total.comb.model)[14]*ba.Pima
-                      +coef(total.comb.model)[15]*ba.Piba)
 
-dat5$land.eff <- with(dat5, coef(total.comb.model)[16]*elev 
-                      + coef(total.comb.model)[17]*age.y 
-                      +coef(total.comb.model)[18]*prefire.org
-                      +coef(total.comb.model)[19]*moisture.new)
+################ 
 
 #Second, make a loadings relationship
 comp_loadings_mod.fire <- lm(fire.eff ~ DOB_LB+FFMC_LB+DMC_LB+DC_LB+ISI_LB+BUI_LB+FWI_LB+VPD_LB,  data=dat5)
 comp_loadings_mod.tree<- lm(tree.eff ~ tree.bio.m2+pima.prop+Pima.dens+Piba.dens+ba.Pima+ba.Piba, data=dat5)
-comp_loadings_mod.land<- lm(land.eff ~ elev+age.y+prefire.org+moisture.new, data=dat5)
+comp_loadings_mod.land<- lm(land.eff ~ elev+age.y+prefire.org+moisture.new,data=dat5)
 #Third, refit the model with the composite
 dat_comp_mod<- lm(log.total.combustion.gCm2 ~ fire.eff+tree.eff +land.eff, data=dat5)
 #Roll it into a pSEM
-fire_comp_psem1 <- psem(
+fire_comp_psem <- psem(
   comp_loadings_mod.fire,
   comp_loadings_mod.tree,
   comp_loadings_mod.land,
@@ -213,62 +175,67 @@ fire_comp_psem1 <- psem(
   land.eff%~~%tree.eff,
   data = dat5
 )
-coefs(fire_comp_psem1)
-basisSet(fire_comp_psem1)
-dSep(fire_comp_psem1)
-fisherC(fire_comp_psem1)
-summary(fire_comp_psem1)
+coefs(fire_comp_psem)
+basisSet(fire_comp_psem)
+dSep(fire_comp_psem)
+fisherC(fire_comp_psem)
+summary(fire_comp_psem)
 
 ################################O
 
-####
-# OKAY - that works but it does NOT work if I try to include random effects - and I want to include the random effect of ecoregion
-
-
-##################
+#################
 #############I also need to do the mulitgroup comparison - fully unconstrained compostie model 
 ####
 
 library(piecewise)
 
 #First, fit the observed only model on the composite piece
-total.comb.model1<- lm(log.total.combustion.gCm2 ~ DOB_LB*ecoregion+FFMC_LB*ecoregion+DMC_LB*ecoregion+DC_LB*ecoregion+ISI_LB*ecoregion
+total.comb.model1<- lmer(log.total.combustion.gCm2 ~ DOB_LB*ecoregion+FFMC_LB*ecoregion+DMC_LB*ecoregion+DC_LB*ecoregion+ISI_LB*ecoregion
                        +BUI_LB*ecoregion+FWI_LB*ecoregion+VPD_LB*ecoregion+tree.bio.m2*ecoregion+pima.prop*ecoregion
                        +Pima.dens*ecoregion+Piba.dens*ecoregion+ba.Pima*ecoregion+ba.Piba*ecoregion+elev*ecoregion
-                       +age.y*ecoregion+prefire.org*ecoregion+moisture.new*ecoregion, data=dat5)
+                       +age.y*ecoregion+prefire.org*ecoregion+moisture.new*ecoregion + (1|burn/site), data=dat5)
 
+control=lmerControl(check.conv.singular="warning")
 
-
-coef(total.comb.model1)
+fixef(total.comb.model1)
 #Now extract a composite - multiply by the appropriately numbered interaction!!
-dat5$fire.eff1 <- with(dat5, coef(total.comb.model1)[21]*DOB_LB
-                       + coef(total.comb.model1)[22]*FFMC_LB 
-                       +coef(total.comb.model1)[23]*DMC_LB
-                       +coef(total.comb.model1)[24]*DC_LB
-                       +coef(total.comb.model1)[25]*ISI_LB
-                       +coef(total.comb.model1)[26]*BUI_LB
-                       +coef(total.comb.model1)[27]*FWI_LB
-                       +coef(total.comb.model1)[28]*VPD_LB)
+dat5$fire.eff1 <- with(dat5, fixef(total.comb.model1)[21]*DOB_LB
+                       + fixef(total.comb.model1)[22]*FFMC_LB 
+                       +fixef(total.comb.model1)[23]*DMC_LB
+                       +fixef(total.comb.model1)[24]*DC_LB
+                       +fixef(total.comb.model1)[25]*ISI_LB
+                       +fixef(total.comb.model1)[26]*BUI_LB
+                       +fixef(total.comb.model1)[27]*FWI_LB
+                       +fixef(total.comb.model1)[28]*VPD_LB)
 
-dat5$tree.eff1 <- with(dat5, coef(total.comb.model1)[29]*tree.bio.m2 
-                       + coef(total.comb.model1)[30]*pima.prop 
-                       +coef(total.comb.model1)[31]*Pima.dens
-                       +coef(total.comb.model1)[32]*Piba.dens
-                       +coef(total.comb.model1)[33]*ba.Pima
-                       +coef(total.comb.model1)[34]*ba.Piba)
+dat5$tree.eff1 <- with(dat5, fixef(total.comb.model1)[29]*tree.bio.m2 
+                       + fixef(total.comb.model1)[30]*pima.prop 
+                       +fixef(total.comb.model1)[31]*Pima.dens
+                       +fixef(total.comb.model1)[32]*Piba.dens
+                       +fixef(total.comb.model1)[33]*ba.Pima
+                       +fixef(total.comb.model1)[34]*ba.Piba)
 
-dat5$land.eff1 <- with(dat5, coef(total.comb.model1)[35]*elev 
-                       + coef(total.comb.model1)[36]*age.y 
-                       +coef(total.comb.model1)[37]*prefire.org
-                       +coef(total.comb.model1)[38]*moisture.new)
+dat5$land.eff1 <- with(dat5, fixef(total.comb.model1)[35]*elev 
+                       + fixef(total.comb.model1)[36]*age.y 
+                       +fixef(total.comb.model1)[37]*prefire.org
+                       +fixef(total.comb.model1)[38]*moisture.new)
 
 #Second, make a loadings relationship
-comp_loadings_mod.fire1 <- lm(fire.eff1 ~ DOB_LB*ecoregion+FFMC_LB*ecoregion+DMC_LB*ecoregion+DC_LB*ecoregion+ISI_LB*ecoregion+BUI_LB*ecoregion+FWI_LB*ecoregion+VPD_LB*ecoregion, data=dat5)
-comp_loadings_mod.tree1<- lm(tree.eff1 ~ tree.bio.m2*ecoregion+pima.prop*ecoregion+Pima.dens*ecoregion+Piba.dens*ecoregion+ba.Pima*ecoregion+ba.Piba*ecoregion, data=dat5)
-comp_loadings_mod.land1<- lm(land.eff1 ~ elev*ecoregion+age.y*ecoregion+prefire.org*ecoregion+moisture.new*ecoregion, data=dat5)
+comp_loadings_mod.fire1 <- lmer(fire.eff1 ~ DOB_LB*ecoregion+FFMC_LB*ecoregion+DMC_LB*ecoregion+DC_LB*ecoregion+ISI_LB*ecoregion+BUI_LB*ecoregion+FWI_LB*ecoregion+VPD_LB*ecoregion+ (1|burn/site), data=dat5)
+comp_loadings_mod.tree1<- lmer(tree.eff1 ~ tree.bio.m2*ecoregion+pima.prop*ecoregion+Pima.dens*ecoregion+Piba.dens*ecoregion+ba.Pima*ecoregion+ba.Piba*ecoregion+ (1|burn/site),data=dat5)
+comp_loadings_mod.land1<- lmer(land.eff1 ~ elev*ecoregion+age.y*ecoregion+prefire.org*ecoregion+moisture.new*ecoregion+ (1|burn/site),data=dat5)
+
+##############Get the following warnings:
+#Warning messages:
+ # 1: In checkConv(attr(opt, "derivs"), opt$par, ctrl = control$checkConv,  :
+  #                  Model failed to converge with max|grad| = 0.596774 (tol = 0.002, component 1)
+   #               2: In checkConv(attr(opt, "derivs"), opt$par, ctrl = control$checkConv,  :
+    #                                Model is nearly unidentifiable: very large eigenvalue
+     #                             - Rescale variables?
+
 
 #Third, refit the model with the composite
-dat_comp_mod1<- lm(log.total.combustion.gCm2 ~ fire.eff1*ecoregion+tree.eff1*ecoregion +land.eff1*ecoregion, data=dat5)
+dat_comp_mod1<- lmer(log.total.combustion.gCm2 ~ fire.eff1*ecoregion+tree.eff1*ecoregion +land.eff1*ecoregion + (1|burn/site),data=dat5)
 #Roll it into a pSEM
 fire_comp_psem1 <- psem(
   comp_loadings_mod.fire1,
@@ -285,8 +252,9 @@ basisSet(fire_comp_psem1)
 dSep(fire_comp_psem1)
 fisherC(fire_comp_psem1)
 summary(fire_comp_psem1)
-lapply(fire_comp_psem1[-length(fire_comp_psem1)],Anova)
+anova.psem(fire_comp_psem1)
+coefs(fire_comp_psem1)
+#######################how do I extract the coefficients for each ecoregions????
+################################ 
 
-#######################how do I know which coefficients differ between ecoregions????
-################################ AND how can I include random effects in the model??
 
